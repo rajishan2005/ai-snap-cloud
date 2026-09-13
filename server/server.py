@@ -60,7 +60,7 @@ def cleanup_loop():
 threading.Thread(target=cleanup_loop,daemon=True).start()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='AISnapCloud/0.4.2'
+    server_version='AISnapCloud/0.4.3'
     def log_message(self,fmt,*args): return
     def cors(self):
         self.send_header('Access-Control-Allow-Origin','*')
@@ -86,8 +86,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
-        if path=='/health':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.2','e2ee':True,'instant':True})
-        if path=='/':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.2','e2ee':True,'mobile':f'{public_base(self)}/mobile/'})
+        if path=='/health':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.3','e2ee':True,'instant':True})
+        if path=='/':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.3','e2ee':True,'mobile':f'{public_base(self)}/mobile/'})
         if path=='/api/pair/status':
             code=self.code()
             if not valid_code(code):return self.send_json({'ok':False,'error':'invalid_or_expired_pair'},401)
@@ -115,7 +115,7 @@ class Handler(BaseHTTPRequestHandler):
                     if f.is_file():files.append({'name':f.name,'size':f.stat().st_size,'age':round(now()-f.stat().st_mtime,1)})
             return self.send_json({'files':files})
         if path=='/api/file-meta':
-            code=self.code();
+            code=self.code()
             if not valid_code(code):return self.send_json({'error':'invalid_or_expired_pair'},401)
             name=Path(urllib.parse.unquote(self.q().get('name',[''])[0])).name
             f=pair_dir(code)/name
@@ -190,8 +190,9 @@ class Handler(BaseHTTPRequestHandler):
         meta={'name':orig,'mime':ct,'iv':client_iv,'wrapped_key':client_key}
         with lock:
             pairs[code]['files'][name]=meta;pairs[code]['last_used']=now();subs=list(pairs[code]['subscribers'])
+        event={'name':name,'iv':client_iv,'wrappedKey':client_key,'mime':ct,'originalName':orig}
         for q in subs:
-            try:q.put_nowait({'name':name})
+            try:q.put_nowait(event)
             except Exception:pass
         return self.send_json({'ok':True,'name':name,'instant':True})
 
@@ -217,4 +218,4 @@ def public_base(handler):
     return f'{proto if proto in ("http","https") else "https"}://{host}'
 
 if __name__=='__main__':
-    port=int(os.getenv('PORT','8765'));print(f'AI Snap Cloud v0.4.2 listening on :{port}');ThreadingHTTPServer(('0.0.0.0',port),Handler).serve_forever()
+    port=int(os.getenv('PORT','8765'));print(f'AI Snap Cloud v0.4.3 listening on :{port}');ThreadingHTTPServer(('0.0.0.0',port),Handler).serve_forever()
