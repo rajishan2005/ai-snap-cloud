@@ -6,14 +6,6 @@ async function notifyActiveTab() {
   } catch (_) {}
 }
 
-function bytesToBase64(buffer) {
-  const bytes = new Uint8Array(buffer);
-  let out = '';
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) out += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
-  return btoa(out);
-}
-
 async function fetchJson(url) {
   const r = await fetch(url, { cache: 'no-store' });
   const text = await r.text();
@@ -69,7 +61,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               headers['X-AI-Snap-Name'] = meta.json.originalName || '';
             }
           }
-          sendResponse({ ok: r.ok, status: r.status, headers, data: bytesToBase64(data) });
+          sendResponse({ ok: r.ok, status: r.status, headers, data });
         } else {
           const text = await r.text();
           sendResponse({ ok: r.ok, status: r.status, text });
