@@ -41,6 +41,13 @@ function renderUploading(url){screen.innerHTML=`<section class="hero"><h1>Sendin
 function renderSuccess(url){screen.innerHTML=`<section class="hero success"><h1>Sent.</h1><p>Your encrypted image was delivered to the AI Snap extension.</p></section><div class="glass preview"><img src="${url}" alt="Sent photo"></div><div class="bottom"><button class="primary" id="again">Send Another</button><button class="secondary" id="disconnect">Disconnect / use another code</button></div>`;document.getElementById('again').onclick=renderReady;document.getElementById('disconnect').onclick=disconnectPhone}
 function b64url(bytes){let bin='';const a=new Uint8Array(bytes);for(let i=0;i<a.length;i++)bin+=String.fromCharCode(a[i]);return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 async function importPublicKey(jwk){return crypto.subtle.importKey('jwk',jwk,{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt'])}
+async function getFreshPublicKey(){
+  const r=await fetch(`${base}/api/pair/status?code=${encodeURIComponent(code)}`,{cache:'no-store'});
+  const d=await r.json();
+  if(!r.ok||!d.ok||!d.e2ee||!d.publicKey)throw new Error('Secure pairing key is unavailable');
+  publicKey=d.publicKey;
+  return publicKey;
+}
 async function prepareImage(file){
   const MAX_SIDE=3500;
   if(!file||!file.type.startsWith('image/'))return file;
@@ -61,8 +68,14 @@ async function prepareImage(file){
   }catch(_){return file}
 }
 async function encryptFile(file){
-  if(!publicKey){const r=await fetch(`${base}/api/pair/status?code=${encodeURIComponent(code)}`,{cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok||!d.publicKey)throw new Error('Secure pairing key is unavailable');publicKey=d.publicKey}
-  const aes=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']);const iv=crypto.getRandomValues(new Uint8Array(12));const plain=await file.arrayBuffer();const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},aes,plain);const raw=await crypto.subtle.exportKey('raw',aes);const rsa=await importPublicKey(publicKey);const wrapped=await crypto.subtle.encrypt({name:'RSA-OAEP'},rsa,raw);
+  const jwk=await getFreshPublicKey();
+  const aes=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const plain=await file.arrayBuffer();
+  const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},aes,plain);
+  const raw=await crypto.subtle.exportKey('raw',aes);
+  const rsa=await importPublicKey(jwk);
+  const wrapped=await crypto.subtle.encrypt({name:'RSA-OAEP'},rsa,raw);
   return {cipher,iv:b64url(iv),wrapped:b64url(wrapped),mime:file.type||'image/jpeg',name:file.name||'ai-snap.jpg'};
 }
 async function upload(file){
@@ -72,5 +85,5 @@ async function upload(file){
   finally{URL.revokeObjectURL(url);busy=false}
 }
 camera.onchange=()=>{const f=camera.files?.[0];camera.value='';if(f)upload(f)};gallery.onchange=()=>{const f=gallery.files?.[0];gallery.value='';if(f)upload(f)};
-(async()=>{if(!code){setConn(false,'Not paired');renderConnect();return}try{const r=await fetch(`${base}/api/pair/status?code=${encodeURIComponent(code)}`,{cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok||!d.e2ee||!d.publicKey)throw new Error();publicKey=d.publicKey;localStorage.setItem('aiSnapCode',code);setConn(true,'Connected');renderReady()}catch{localStorage.removeItem('aiSnapCode');code='';publicKey=null;setConn(false,'Not paired');renderConnect('This pairing is missing or expired. Enter a new code from the PC extension.')}})();
+(async()=>{if(!code){setConn(false,'Not paired');renderConnect();return}try{const d=await getFreshPublicKey();if(!d)throw new Error();localStorage.setItem('aiSnapCode',code);setConn(true,'Connected');renderReady()}catch{localStorage.removeItem('aiSnapCode');code='';publicKey=null;setConn(false,'Not paired');renderConnect('This pairing is missing or expired. Enter a new code from the PC extension.')}})();
 </script></body></html>
