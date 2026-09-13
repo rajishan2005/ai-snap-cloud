@@ -30,23 +30,23 @@ async function attachBlob(buffer,mime,name){
   if(setter)setter.call(input,transfer.files);else input.files=transfer.files;
   input.dispatchEvent(new Event('input',{bubbles:true,composed:true}));input.dispatchEvent(new Event('change',{bubbles:true,composed:true}));return true;
 }
-async function fetchFileThroughExtension(url,metaUrl){
+async function fetchFileThroughExtension(url,metaUrl,eventMeta={}){
   for(let attempt=0;attempt<5;attempt++){
-    try{const r=await runtimeMessage({type:'AI_SNAP_FETCH_FILE',url,metaUrl});if(r?.ok)return r;if(r?.status===404){await sleep(150);continue}return r||{ok:false,error:'No response'};}catch(e){if(attempt===4)throw e;await sleep(150);}
+    try{const r=await runtimeMessage({type:'AI_SNAP_FETCH_FILE',url,metaUrl,eventMeta});if(r?.ok)return r;if(r?.status===404){await sleep(100);continue}return r||{ok:false,error:'No response'};}catch(e){if(attempt===4)throw e;await sleep(100);}
   }
   return {ok:false,status:404,error:'File not available yet'};
 }
-async function deliver(name){
+async function deliver(name,eventMeta={}){
   if(!isCurrentChat()||processing.has(name))return false;processing.add(name);
   try{
     const c=await getConfig(),base=(c.baseUrl||'').replace(/\/$/,'');
     if(!c.enabled||!base||!c.pairCode||!c.privateKey)throw new Error('Secure pairing is not configured.');
     const url=`${base}/api/file/${encodeURIComponent(name)}?code=${encodeURIComponent(c.pairCode)}`;
     const metaUrl=`${base}/api/file-meta?code=${encodeURIComponent(c.pairCode)}&name=${encodeURIComponent(name)}`;
-    const r=await fetchFileThroughExtension(url,metaUrl);if(!r.ok)throw new Error(r.status?`Could not download encrypted image (${r.status}).`:(r.error||'Could not download encrypted image.'));
+    const r=await fetchFileThroughExtension(url,metaUrl,eventMeta);if(!r.ok)throw new Error(r.status?`Could not download encrypted image (${r.status}).`:(r.error||'Could not download encrypted image.'));
     const iv=r.headers?.['X-AI-Snap-IV'],wrapped=r.headers?.['X-AI-Snap-Key'],mime=r.headers?.['X-AI-Snap-Mime']||'image/jpeg',original=r.headers?.['X-AI-Snap-Name']||'ai-snap.jpg';
     if(!iv||!wrapped)throw new Error('Encrypted metadata is missing.');
-    const encrypted=fromBase64(r.data),privateKey=await crypto.subtle.importKey('jwk',c.privateKey,{name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
+    const encrypted=r.data instanceof ArrayBuffer?r.data:fromBase64(r.data),privateKey=await crypto.subtle.importKey('jwk',c.privateKey,{name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
     const rawAes=await crypto.subtle.decrypt({name:'RSA-OAEP'},privateKey,fromB64url(wrapped));const aesKey=await crypto.subtle.importKey('raw',rawAes,{name:'AES-GCM'},false,['decrypt']);
     const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:fromB64url(iv)},aesKey,encrypted);await attachBlob(plain,mime,original);
     runtimeMessage({type:'AI_SNAP_ACK',url:`${base}/api/ack?code=${encodeURIComponent(c.pairCode)}`,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}).catch(()=>{});return true;
@@ -59,12 +59,11 @@ async function checkPending(){
     for(const f of(Array.isArray(d.files)?d.files:[]))await deliver(f.name);
   }catch(_){}finally{pendingCheckInFlight=false}
 }
-function startPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>{if(isCurrentChat())checkPending()},600);checkPending();}
+function startPolling(){if(pollTimer)clearInterval(pollTimer);pollTimer=setInterval(()=>{if(isCurrentChat())checkPending()},250);checkPending();}
 function connectEvents(){
   if(eventSource){eventSource.close();eventSource=null}if(reconnectTimer)clearTimeout(reconnectTimer);
   getConfig().then(c=>{const base=(c.baseUrl||'').replace(/\/$/,'');if(!c.enabled||!base||!c.pairCode||!c.privateKey)return;
-    try{eventSource=new EventSource(`${base}/api/events?code=${encodeURIComponent(c.pairCode)}`);eventSource.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.name&&isCurrentChat())deliver(d.name)}catch(_){}};eventSource.onerror=()=>{if(eventSource){eventSource.close();eventSource=null}reconnectTimer=setTimeout(connectEvents,1000)}}catch(_){reconnectTimer=setTimeout(connectEvents,1000)}
-  });
+    try{eventSource=new EventSource(`${base}/api/events?code=${encodeURIComponent(c.pairCode)}`);eventSource.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.name&&isCurrentChat())deliver(d.name,{iv:d.iv||'',wrappedKey:d.wrappedKey||'',mime:d.mime||'',originalName:d.originalName||''})}catch(_){}};eventSource.onerror=()=>{if(eventSource){eventSource.close();eventSource=null}reconnectTimer=setTimeout(connectEvents,700)}}catch(_){reconnectTimer=setTimeout(connectEvents,700)}});
 }
 chrome.runtime.onMessage.addListener(message=>{if(message?.type==='AI_SNAP_ACTIVE_STATE'){activeTab=!!message.active;if(activeTab)checkPending();}});
 async function init(){try{const r=await chrome.runtime.sendMessage({type:'AI_SNAP_GET_ACTIVE_STATE'});activeTab=!!r?.active}catch(_){activeTab=document.visibilityState==='visible'}startPolling();connectEvents();}
