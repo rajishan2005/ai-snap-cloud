@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, os, secrets, socket, threading, time, urllib.parse
+import io, json, os, secrets, socket, threading, time, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -135,13 +135,13 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
 
         if path == '/health':
-            return self.send_json({'ok': True, 'name': 'AI Snap Cloud', 'version': '0.2.1'})
+            return self.send_json({'ok': True, 'name': 'AI Snap Cloud', 'version': '0.3.0'})
 
         if path == '/':
             return self.send_json({
                 'ok': True,
                 'name': 'AI Snap Cloud',
-                'version': '0.2.1',
+                'version': '0.3.0',
                 'mobile': f'{public_base(self)}/mobile/'
             })
 
@@ -157,6 +157,19 @@ class Handler(BaseHTTPRequestHandler):
                 'expiresIn': PAIR_TTL,
                 'mobileUrl': f'{base}/mobile/?code={code}'
             })
+
+        if path == '/api/pair/qr':
+            code = self.code()
+            if not valid_code(code):
+                return self.send_json({'ok': False, 'error': 'invalid_or_expired_pair'}, 401)
+            try:
+                import qrcode
+                img = qrcode.make(f'{public_base(self)}/mobile/?code={code}')
+                out = io.BytesIO()
+                img.save(out, format='PNG')
+                return self.send_bytes(out.getvalue(), 200, 'image/png')
+            except Exception:
+                return self.send_json({'ok': False, 'error': 'qr_unavailable'}, 500)
 
         if path == '/api/pair/status':
             code = self.code()

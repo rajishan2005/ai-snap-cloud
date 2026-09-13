@@ -5,15 +5,16 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>AI Snap</title>
   <style>
-    body{font:14px system-ui,sans-serif;width:320px;padding:16px;margin:0;color:#151827}
+    body{font:14px system-ui,sans-serif;width:340px;padding:16px;margin:0;color:#151827}
     h3{margin:0 0 4px;font-size:18px}.sub{color:#697087;font-size:12px;margin-bottom:14px}
     label{display:block;font-weight:650;margin:10px 0 5px}
     input,button{width:100%;box-sizing:border-box;padding:10px 11px;margin:4px 0;border-radius:10px}
-    input{border:1px solid #cbd0dc;outline:none}.code{font:800 24px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:4px;text-align:center}
+    input{border:1px solid #cbd0dc;outline:none}.code{font:800 25px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:5px;text-align:center}
     button{border:0;cursor:pointer;font-weight:700}.primary{background:#111827;color:white}.secondary{background:#eef0f5;color:#111827}
     #status{margin-top:10px;min-height:20px;line-height:1.4}.ok{color:#087443}.bad{color:#b42318}
     .pair{display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e7e9ef}.pair.show{display:block}
-    .link{font-size:11px;word-break:break-all;color:#596177;background:#f6f7fa;padding:8px;border-radius:8px;margin-top:6px}
+    .qrWrap{display:flex;justify-content:center;margin:8px 0 4px}.qr{width:156px;height:156px;padding:8px;background:white;border-radius:14px;border:1px solid #e2e5ec;box-sizing:border-box}
+    .hint{text-align:center;color:#697087;font-size:12px;margin:4px 0 10px}.link{font-size:11px;word-break:break-all;color:#596177;background:#f6f7fa;padding:8px;border-radius:8px;margin-top:6px}
   </style>
 </head>
 <body>
@@ -21,16 +22,18 @@
   <div class="sub">Phone → cloud → ChatGPT</div>
 
   <label for="baseUrl">Cloud server URL</label>
-  <input id="baseUrl" type="url" placeholder="https://your-app.onrender.com" autocomplete="off">
+  <input id="baseUrl" type="url" placeholder="https://your-app.up.railway.app" autocomplete="off">
 
   <button id="save" class="secondary">Save server URL</button>
   <button id="pair" class="primary">Create Pairing</button>
 
   <div id="pairBox" class="pair">
     <label>Pairing code</label>
-    <input id="code" class="code" readonly>
-    <div class="link" id="mobileUrl"></div>
+    <input id="code" class="code" readonly aria-label="Pairing code">
+    <div class="qrWrap"><img id="qr" class="qr" alt="Scan to pair phone"></div>
+    <div class="hint">Scan the QR code, or open the site on your phone and enter this code.</div>
     <button id="copy" class="secondary">Copy phone link</button>
+    <div class="link" id="mobileUrl"></div>
     <button id="newPair" class="secondary">Create New Pairing</button>
   </div>
 

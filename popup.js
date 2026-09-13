@@ -7,6 +7,7 @@ const status = document.getElementById('status');
 const pairBox = document.getElementById('pairBox');
 const codeInput = document.getElementById('code');
 const mobileUrl = document.getElementById('mobileUrl');
+const qr = document.getElementById('qr');
 
 function setStatus(message, ok = false) {
   status.textContent = message;
@@ -19,6 +20,15 @@ async function getConfig() {
 
 async function setConfig(values) {
   await chrome.storage.local.set(values);
+}
+
+function showPairing(base, code) {
+  const clean = base.replace(/\/$/, '');
+  const url = `${clean}/mobile/?code=${encodeURIComponent(code)}`;
+  codeInput.value = code;
+  mobileUrl.textContent = url;
+  qr.src = `${clean}/api/pair/qr?code=${encodeURIComponent(code)}&t=${Date.now()}`;
+  pairBox.classList.add('show');
 }
 
 async function createPairing() {
@@ -36,10 +46,8 @@ async function createPairing() {
     if (!response.ok || !data.ok) throw new Error(data.error || 'Could not create pairing');
 
     await setConfig({ baseUrl: base, pairCode: data.code, enabled: true });
-    codeInput.value = data.code;
-    mobileUrl.textContent = data.mobileUrl;
-    pairBox.classList.add('show');
-    setStatus('✓ Paired. Open the phone link and take a photo.', true);
+    showPairing(base, data.code);
+    setStatus('✓ Pairing is active. Scan the QR or enter the code on your phone.', true);
   } catch (error) {
     setStatus('Could not reach the cloud server. Check the URL and try again.');
   }
@@ -50,12 +58,11 @@ async function createPairing() {
   baseInput.value = config.baseUrl || '';
   if (config.baseUrl && config.pairCode) {
     try {
-      const r = await fetch(`${config.baseUrl.replace(/\/$/, '')}/api/pair/status?code=${encodeURIComponent(config.pairCode)}`, { cache: 'no-store' });
+      const base = config.baseUrl.replace(/\/$/, '');
+      const r = await fetch(`${base}/api/pair/status?code=${encodeURIComponent(config.pairCode)}`, { cache: 'no-store' });
       const data = await r.json();
       if (r.ok && data.ok) {
-        codeInput.value = config.pairCode;
-        mobileUrl.textContent = `${config.baseUrl.replace(/\/$/, '')}/mobile/?code=${config.pairCode}`;
-        pairBox.classList.add('show');
+        showPairing(base, config.pairCode);
         setStatus('✓ Pairing is active.', true);
       }
     } catch (_) {}
@@ -86,6 +93,6 @@ copyButton.addEventListener('click', async () => {
     await navigator.clipboard.writeText(mobileUrl.textContent);
     setStatus('✓ Phone link copied.', true);
   } catch (_) {
-    setStatus('Copy failed — long-press/select the link instead.');
+    setStatus('Copy failed — select the link instead.');
   }
 });
