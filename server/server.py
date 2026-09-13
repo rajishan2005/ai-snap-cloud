@@ -13,12 +13,10 @@ FILE_TTL = 10 * 60
 CLEAN_INTERVAL = 60
 MIME = {'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8'}
 lock = threading.RLock()
-pairs = {}  # code -> {created,last_used,public_key,files:Set, subscribers:Set[Queue]}
-
+pairs = {}
 
 def now(): return time.time()
 def b64url(data): return base64.urlsafe_b64encode(data).rstrip(b'=').decode()
-def b64url_decode(s): return base64.urlsafe_b64decode(s + '=' * ((4-len(s)%4)%4))
 def new_code():
     alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     while True:
@@ -62,24 +60,34 @@ def cleanup_loop():
 threading.Thread(target=cleanup_loop,daemon=True).start()
 
 class Handler(BaseHTTPRequestHandler):
-    server_version='AISnapCloud/0.4'
+    server_version='AISnapCloud/0.4.2'
     def log_message(self,fmt,*args): return
     def cors(self):
-        self.send_header('Access-Control-Allow-Origin','*');self.send_header('Access-Control-Allow-Headers','Content-Type');self.send_header('Access-Control-Allow-Methods','GET, POST, OPTIONS');self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff');self.send_header('Referrer-Policy','no-referrer')
+        self.send_header('Access-Control-Allow-Origin','*')
+        self.send_header('Access-Control-Allow-Headers','Content-Type, X-AI-Snap-IV, X-AI-Snap-AES-Key, X-AI-Snap-Name')
+        self.send_header('Access-Control-Expose-Headers','X-AI-Snap-IV, X-AI-Snap-Key, X-AI-Snap-Mime, X-AI-Snap-Name')
+        self.send_header('Access-Control-Allow-Methods','GET, POST, OPTIONS')
+        self.send_header('Cache-Control','no-store')
+        self.send_header('X-Content-Type-Options','nosniff')
+        self.send_header('Referrer-Policy','no-referrer')
     def send_bytes(self,data,status=200,content_type='application/octet-stream',extra=None):
         self.send_response(status);self.cors();self.send_header('Content-Type',content_type)
         if extra:
             for k,v in extra.items():self.send_header(k,v)
         self.send_header('Content-Length',str(len(data)));self.end_headers();self.wfile.write(data)
-    def send_json(self,obj,status=200):self.send_bytes(json.dumps(obj).encode(),status,'application/json; charset=utf-8')
+    def send_json(self,obj,status=200):self.send_bytes(json.dumps(obj,separators=(',',':')).encode(),status,'application/json; charset=utf-8')
     def q(self):return urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
     def code(self):return (self.q().get('code',[''])[0] or '').strip().upper()
     def do_OPTIONS(self):self.send_response(204);self.cors();self.end_headers()
+    def file_meta(self,code,name):
+        with lock:
+            item=pairs.get(code); meta=item.get('files',{}).get(name,{}) if item else {}
+        return meta
 
     def do_GET(self):
         path=urllib.parse.urlparse(self.path).path
-        if path=='/health':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.0','e2ee':True,'instant':True})
-        if path=='/':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.0','e2ee':True,'mobile':f'{public_base(self)}/mobile/'})
+        if path=='/health':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.2','e2ee':True,'instant':True})
+        if path=='/':return self.send_json({'ok':True,'name':'AI Snap Cloud','version':'0.4.2','e2ee':True,'mobile':f'{public_base(self)}/mobile/'})
         if path=='/api/pair/status':
             code=self.code()
             if not valid_code(code):return self.send_json({'ok':False,'error':'invalid_or_expired_pair'},401)
@@ -97,7 +105,8 @@ class Handler(BaseHTTPRequestHandler):
             rel=path[len('/mobile/'): ] or 'index.html';target=(MOBILE/rel).resolve()
             if not str(target).startswith(str(MOBILE.resolve())) or not target.exists() or not target.is_file():return self.send_json({'error':'not found'},404)
             return self.serve_file(target)
-        if path=='/api/pending':
+        if path in ('/api/pending','/api/events'):
+            if path=='/api/events':return self.events(self.code())
             code=self.code()
             if not valid_code(code):return self.send_json({'error':'invalid_or_expired_pair'},401)
             d=pair_dir(code);files=[]
@@ -105,14 +114,22 @@ class Handler(BaseHTTPRequestHandler):
                 for f in sorted(d.iterdir(),key=lambda p:p.stat().st_mtime):
                     if f.is_file():files.append({'name':f.name,'size':f.stat().st_size,'age':round(now()-f.stat().st_mtime,1)})
             return self.send_json({'files':files})
-        if path=='/api/events': return self.events(self.code())
+        if path=='/api/file-meta':
+            code=self.code();
+            if not valid_code(code):return self.send_json({'error':'invalid_or_expired_pair'},401)
+            name=Path(urllib.parse.unquote(self.q().get('name',[''])[0])).name
+            f=pair_dir(code)/name
+            if not f.exists() or not f.is_file():return self.send_json({'error':'not_found'},404)
+            meta=self.file_meta(code,name)
+            if not meta:return self.send_json({'error':'metadata_not_found'},404)
+            return self.send_json({'ok':True,'name':name,'iv':meta.get('iv',''),'wrappedKey':meta.get('wrapped_key',''),'mime':meta.get('mime','image/jpeg'),'originalName':meta.get('name',name)})
         if path.startswith('/api/file/'):
             code=self.code()
             if not valid_code(code):return self.send_json({'error':'invalid_or_expired_pair'},401)
             name=Path(urllib.parse.unquote(path[len('/api/file/'):])).name;f=pair_dir(code)/name
             if not f.exists() or not f.is_file():return self.send_json({'error':'not_found'},404)
             data=f.read_bytes(); ext=f.suffix.lower();ct={'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'}.get(ext,'application/octet-stream')
-            with lock:item=pairs.get(code,{});meta=item.get('files',{}).get(name,{}) if item else {}
+            meta=self.file_meta(code,name)
             return self.send_bytes(data,200,ct,{'Content-Disposition':f'inline; filename="{meta.get("name",f.name)}"','X-AI-Snap-IV':meta.get('iv',''),'X-AI-Snap-Key':meta.get('wrapped_key',''),'X-AI-Snap-Mime':meta.get('mime',ct),'X-AI-Snap-Name':meta.get('name',f.name)})
         return self.send_json({'error':'not found'},404)
 
@@ -165,28 +182,16 @@ class Handler(BaseHTTPRequestHandler):
         ct=self.headers.get('Content-Type','image/jpeg').split(';')[0].lower()
         if not ct.startswith('image/'):return self.send_json({'error':'image_only'},415)
         data=self.rfile.read(length)
-        with lock:item=pairs.get(code);pub=item.get('public_key') if item else None
-        # The mobile client encrypts the image with AES-GCM and wraps the AES key with the PC public key.
-        # To keep transport simple, accept JSON envelope: ciphertext is raw body and
-        # X-AI-Snap-IV / X-AI-Snap-AES-Key carry base64url values.
         client_iv=self.headers.get('X-AI-Snap-IV');client_key=self.headers.get('X-AI-Snap-AES-Key');orig=self.headers.get('X-AI-Snap-Name','ai-snap.jpg')
-        if not client_iv or not client_key:
-            return self.send_json({'error':'missing_encryption_metadata'},400)
-        try:
-            # Client key is encrypted to the server-held public key only for transit,
-            # then the server stores the wrapped key. The server never gets plaintext image.
-            wrapped=client_key
-            iv=client_iv
-            orig=Path(urllib.parse.unquote(orig)).name or 'ai-snap.jpg'
-        except Exception:return self.send_json({'error':'invalid_encryption_metadata'},400)
+        if not client_iv or not client_key:return self.send_json({'error':'missing_encryption_metadata'},400)
+        orig=Path(urllib.parse.unquote(orig)).name or 'ai-snap.jpg'
         ext='.jpg' if 'jpeg' in ct else '.png' if 'png' in ct else '.webp' if 'webp' in ct else '.bin'
         name=f'snap_{int(now()*1000)}_{secrets.token_hex(3)}{ext}';d=pair_dir(code);d.mkdir(exist_ok=True);(d/name).write_bytes(data)
-        meta={'name':orig,'mime':ct,'iv':iv,'wrapped_key':wrapped}
+        meta={'name':orig,'mime':ct,'iv':client_iv,'wrapped_key':client_key}
         with lock:
             pairs[code]['files'][name]=meta;pairs[code]['last_used']=now();subs=list(pairs[code]['subscribers'])
-        event={'name':name}
         for q in subs:
-            try:q.put_nowait(event)
+            try:q.put_nowait({'name':name})
             except Exception:pass
         return self.send_json({'ok':True,'name':name,'instant':True})
 
@@ -205,7 +210,6 @@ class Handler(BaseHTTPRequestHandler):
             if item:item['files'].pop(name,None)
         return self.send_json({'ok':True})
 
-
 def public_base(handler):
     env=os.getenv('PUBLIC_BASE_URL','').strip().rstrip('/')
     if env:return env
@@ -213,4 +217,4 @@ def public_base(handler):
     return f'{proto if proto in ("http","https") else "https"}://{host}'
 
 if __name__=='__main__':
-    port=int(os.getenv('PORT','8765'));print(f'AI Snap Cloud v0.4 listening on :{port}');ThreadingHTTPServer(('0.0.0.0',port),Handler).serve_forever()
+    port=int(os.getenv('PORT','8765'));print(f'AI Snap Cloud v0.4.2 listening on :{port}');ThreadingHTTPServer(('0.0.0.0',port),Handler).serve_forever()
