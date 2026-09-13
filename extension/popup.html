@@ -13,6 +13,8 @@ button{border:0;cursor:pointer;font-weight:700}.primary{background:#111827;color
 #status{margin-top:10px;min-height:20px;line-height:1.4}.ok{color:#087443}.bad{color:#b42318}
 .pair{display:none;margin-top:12px;padding-top:12px;border-top:1px solid #e7e9ef}.pair.show{display:block}
 .link{font-size:11px;word-break:break-all;color:#596177;background:#f6f7fa;padding:8px;border-radius:8px;margin-top:6px}
+.qrWrap{display:flex;justify-content:center;margin:12px 0 8px}.qrWrap img{width:190px;height:190px;image-rendering:auto;border:8px solid white;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.12);background:white}
+.qrHint{text-align:center;font-size:12px;color:#697087;margin-bottom:8px}
 .small{font-size:11px;color:#697087;line-height:1.4;margin-top:8px}
 </style>
 </head>
@@ -25,6 +27,8 @@ button{border:0;cursor:pointer;font-weight:700}.primary{background:#111827;color
 <button id="pair" class="primary">Create Secure Pairing</button>
 <div id="pairBox" class="pair">
 <label>Pairing code</label><input id="code" class="code" readonly>
+<div class="qrWrap"><img id="qr" alt="Scan to pair phone"></div>
+<div class="qrHint">Scan this QR code with your phone</div>
 <div class="link" id="mobileUrl"></div>
 <button id="copy" class="secondary">Copy phone link</button>
 <button id="newPair" class="secondary">Create New Pairing</button>
