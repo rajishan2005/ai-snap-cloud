@@ -41,6 +41,25 @@ function renderUploading(url){screen.innerHTML=`<section class="hero"><h1>Sendin
 function renderSuccess(url){screen.innerHTML=`<section class="hero success"><h1>Sent.</h1><p>Your encrypted image was delivered to the AI Snap extension.</p></section><div class="glass preview"><img src="${url}" alt="Sent photo"></div><div class="bottom"><button class="primary" id="again">Send Another</button><button class="secondary" id="disconnect">Disconnect / use another code</button></div>`;document.getElementById('again').onclick=renderReady;document.getElementById('disconnect').onclick=disconnectPhone}
 function b64url(bytes){let bin='';const a=new Uint8Array(bytes);for(let i=0;i<a.length;i++)bin+=String.fromCharCode(a[i]);return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 async function importPublicKey(jwk){return crypto.subtle.importKey('jwk',jwk,{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt'])}
+async function prepareImage(file){
+  const MAX_SIDE=3500;
+  if(!file||!file.type.startsWith('image/'))return file;
+  try{
+    const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
+    if(bitmap.width<=MAX_SIDE&&bitmap.height<=MAX_SIDE){bitmap.close();return file;}
+    const scale=Math.min(1,MAX_SIDE/Math.max(bitmap.width,bitmap.height));
+    const w=Math.max(1,Math.round(bitmap.width*scale)),h=Math.max(1,Math.round(bitmap.height*scale));
+    const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+    const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(bitmap,0,0,w,h);bitmap.close();
+    const outputType=file.type==='image/png'?'image/png':file.type==='image/webp'?'image/webp':'image/jpeg';
+    const quality=outputType==='image/png'?undefined:.94;
+    const blob=await new Promise(resolve=>canvas.toBlob(resolve,outputType,quality));
+    if(!blob)return file;
+    const ext=outputType==='image/png'?'.png':outputType==='image/webp'?'.webp':'.jpg';
+    const name=(file.name||'ai-snap').replace(/\.[^.]+$/,'')+ext;
+    return new File([blob],name,{type:outputType,lastModified:Date.now()});
+  }catch(_){return file}
+}
 async function encryptFile(file){
   if(!publicKey){const r=await fetch(`${base}/api/pair/status?code=${encodeURIComponent(code)}`,{cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok||!d.publicKey)throw new Error('Secure pairing key is unavailable');publicKey=d.publicKey}
   const aes=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']);const iv=crypto.getRandomValues(new Uint8Array(12));const plain=await file.arrayBuffer();const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},aes,plain);const raw=await crypto.subtle.exportKey('raw',aes);const rsa=await importPublicKey(publicKey);const wrapped=await crypto.subtle.encrypt({name:'RSA-OAEP'},rsa,raw);
@@ -48,7 +67,7 @@ async function encryptFile(file){
 }
 async function upload(file){
   if(busy||!file)return;busy=true;const url=URL.createObjectURL(file);renderUploading(url);
-  try{const e=await encryptFile(file);const r=await fetch(`${base}/api/upload?code=${encodeURIComponent(code)}`,{method:'POST',headers:{'Content-Type':e.mime,'X-AI-Snap-IV':e.iv,'X-AI-Snap-AES-Key':e.wrapped,'X-AI-Snap-Name':encodeURIComponent(e.name)},body:e.cipher,cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload failed');renderSuccess(url)}
+  try{const prepared=await prepareImage(file);const e=await encryptFile(prepared);const r=await fetch(`${base}/api/upload?code=${encodeURIComponent(code)}`,{method:'POST',headers:{'Content-Type':e.mime,'X-AI-Snap-IV':e.iv,'X-AI-Snap-AES-Key':e.wrapped,'X-AI-Snap-Name':encodeURIComponent(e.name)},body:e.cipher,cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error||'Upload failed');renderSuccess(url)}
   catch(e){screen.innerHTML=`<section class="hero"><h1>Couldn’t send it.</h1><p>${e.message||'Upload failed'}</p></section><div class="bottom"><button class="primary" id="retry">Try Again</button><button class="secondary" id="change2">Change pairing code</button></div>`;document.getElementById('retry').onclick=renderReady;document.getElementById('change2').onclick=disconnectPhone}
   finally{URL.revokeObjectURL(url);busy=false}
 }
