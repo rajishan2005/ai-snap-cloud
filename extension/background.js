@@ -51,11 +51,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const headers = {};
           for (const name of ['X-AI-Snap-IV','X-AI-Snap-Key','X-AI-Snap-Mime','X-AI-Snap-Name']) headers[name] = r.headers.get(name) || '';
 
-          // Some proxy/CDN configurations strip custom response headers. In that case,
-          // retrieve the E2EE metadata through the JSON endpoint instead of failing.
+          // Fast path: SSE supplied the encrypted metadata with the event, so no
+          // second request is needed. Keep the metadata endpoint as a fallback.
+          const eventMeta = message.eventMeta || {};
+          if (!headers['X-AI-Snap-IV'] && eventMeta.iv) headers['X-AI-Snap-IV'] = eventMeta.iv;
+          if (!headers['X-AI-Snap-Key'] && eventMeta.wrappedKey) headers['X-AI-Snap-Key'] = eventMeta.wrappedKey;
+          if (!headers['X-AI-Snap-Mime'] && eventMeta.mime) headers['X-AI-Snap-Mime'] = eventMeta.mime;
+          if (!headers['X-AI-Snap-Name'] && eventMeta.originalName) headers['X-AI-Snap-Name'] = eventMeta.originalName;
+
           const hasMeta = !!headers['X-AI-Snap-IV'] && !!headers['X-AI-Snap-Key'];
-          if (r.ok && !hasMeta) {
-            const meta = await fetchJson(message.metaUrl || '');
+          if (r.ok && !hasMeta && message.metaUrl) {
+            const meta = await fetchJson(message.metaUrl);
             if (meta.ok && meta.json?.ok) {
               headers['X-AI-Snap-IV'] = meta.json.iv || '';
               headers['X-AI-Snap-Key'] = meta.json.wrappedKey || '';
