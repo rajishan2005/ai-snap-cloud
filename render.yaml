@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ai-snap-cloud
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: "python server/server.py"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "AI Snap — Phone to ChatGPT",
+  "version": "0.2.0",
+  "description": "Receives photos from your phone and attaches them to the open ChatGPT tab through the AI Snap cloud relay.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_popup": "popup.html"},
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
