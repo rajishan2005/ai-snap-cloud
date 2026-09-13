@@ -30,9 +30,9 @@ async function attachBlob(buffer,mime,name){
   if(setter)setter.call(input,transfer.files);else input.files=transfer.files;
   input.dispatchEvent(new Event('input',{bubbles:true,composed:true}));input.dispatchEvent(new Event('change',{bubbles:true,composed:true}));return true;
 }
-async function fetchFileThroughExtension(url){
+async function fetchFileThroughExtension(url,metaUrl){
   for(let attempt=0;attempt<5;attempt++){
-    try{const r=await runtimeMessage({type:'AI_SNAP_FETCH_FILE',url});if(r?.ok)return r;if(r?.status===404){await sleep(150);continue}return r||{ok:false,error:'No response'};}catch(e){if(attempt===4)throw e;await sleep(150);}
+    try{const r=await runtimeMessage({type:'AI_SNAP_FETCH_FILE',url,metaUrl});if(r?.ok)return r;if(r?.status===404){await sleep(150);continue}return r||{ok:false,error:'No response'};}catch(e){if(attempt===4)throw e;await sleep(150);}
   }
   return {ok:false,status:404,error:'File not available yet'};
 }
@@ -42,7 +42,8 @@ async function deliver(name){
     const c=await getConfig(),base=(c.baseUrl||'').replace(/\/$/,'');
     if(!c.enabled||!base||!c.pairCode||!c.privateKey)throw new Error('Secure pairing is not configured.');
     const url=`${base}/api/file/${encodeURIComponent(name)}?code=${encodeURIComponent(c.pairCode)}`;
-    const r=await fetchFileThroughExtension(url);if(!r.ok)throw new Error(r.status?`Could not download encrypted image (${r.status}).`:(r.error||'Could not download encrypted image.'));
+    const metaUrl=`${base}/api/file-meta?code=${encodeURIComponent(c.pairCode)}&name=${encodeURIComponent(name)}`;
+    const r=await fetchFileThroughExtension(url,metaUrl);if(!r.ok)throw new Error(r.status?`Could not download encrypted image (${r.status}).`:(r.error||'Could not download encrypted image.'));
     const iv=r.headers?.['X-AI-Snap-IV'],wrapped=r.headers?.['X-AI-Snap-Key'],mime=r.headers?.['X-AI-Snap-Mime']||'image/jpeg',original=r.headers?.['X-AI-Snap-Name']||'ai-snap.jpg';
     if(!iv||!wrapped)throw new Error('Encrypted metadata is missing.');
     const encrypted=fromBase64(r.data),privateKey=await crypto.subtle.importKey('jwk',c.privateKey,{name:'RSA-OAEP',hash:'SHA-256'},false,['decrypt']);
