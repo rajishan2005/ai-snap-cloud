@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AI Snap — Phone to ChatGPT",
   "version": "0.4.8",
-  "description": "End-to-end encrypted phone-to-ChatGPT image relay with fast delivery.",
+  "description": "End-to-end encrypted phone-to-ChatGPT image relay with instant delivery.",
   "permissions": ["storage", "tabs"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "background": {"service_worker": "background.js"},
