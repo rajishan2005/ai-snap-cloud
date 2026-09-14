@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import io, json, os, queue, secrets, socket, threading, time, urllib.parse
+import io, json, os, queue, secrets, threading, time, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -24,9 +24,9 @@ MIME = {
 
 lock = threading.Lock()
 sub_lock = threading.Lock()
-# code -> {'created': epoch, 'last_used': epoch}
+# code -> {'created': epoch, 'last_used': epoch, 'publicKey': JWK, 'files': {name: metadata}}
 pairs = {}
-# code -> list[queue.Queue]  (one queue per open SSE connection)
+# code -> list[queue.Queue]
 subscribers = {}
 
 
@@ -65,11 +65,23 @@ def touch_pair(code):
             pairs[code]['last_used'] = now()
 
 
-def notify_subscribers(code, name):
-    # Push an "a new file arrived" event to every open SSE connection for this code.
+def close_subscribers(code):
+    with sub_lock:
+        queues = subscribers.pop(code, [])
+        for q in queues:
+            try:
+                q.put_nowait(None)
+            except Exception:
+                pass
+
+
+def notify_subscribers(code, event):
     with sub_lock:
         for q in subscribers.get(code, []):
-            q.put(name)
+            try:
+                q.put_nowait(event)
+            except Exception:
+                pass
 
 
 def cleanup_loop():
@@ -82,6 +94,7 @@ def cleanup_loop():
             for c in expired:
                 pairs.pop(c, None)
         for c in expired:
+            close_subscribers(c)
             d = pair_dir(c)
             if d.exists():
                 for p in d.iterdir():
@@ -100,6 +113,9 @@ def cleanup_loop():
                 try:
                     if p.is_file() and p.stat().st_mtime < cutoff_file:
                         p.unlink()
+                        with lock:
+                            for item in pairs.values():
+                                item.get('files', {}).pop(p.name, None)
                 except Exception:
                     pass
 
@@ -108,12 +124,13 @@ threading.Thread(target=cleanup_loop, daemon=True).start()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'AISnapCloud/0.4'
+    server_version = 'AISnapCloud/0.4.5'
 
     def cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-AI-Snap-IV, X-AI-Snap-AES-Key, X-AI-Snap-Name')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Expose-Headers', 'X-AI-Snap-IV, X-AI-Snap-Key, X-AI-Snap-Mime, X-AI-Snap-Name')
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
@@ -130,16 +147,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def send_json(self, obj, status=200):
-        data = json.dumps(obj).encode('utf-8')
-        self.send_bytes(data, status, 'application/json; charset=utf-8')
+        self.send_bytes(json.dumps(obj).encode('utf-8'), status, 'application/json; charset=utf-8')
 
     def q(self):
         return urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
 
     def code(self):
-        q = self.q()
-        code = (q.get('code', [''])[0] or '').strip().upper()
-        return code
+        return (self.q().get('code', [''])[0] or '').strip().upper()
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -150,28 +164,16 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
 
         if path == '/health':
-            return self.send_json({'ok': True, 'name': 'AI Snap Cloud', 'version': '0.4.0'})
+            return self.send_json({'ok': True, 'name': 'AI Snap Cloud', 'version': '0.4.5', 'e2ee': True, 'instant': True})
 
         if path == '/':
-            return self.send_json({
-                'ok': True,
-                'name': 'AI Snap Cloud',
-                'version': '0.4.0',
-                'mobile': f'{public_base(self)}/mobile/'
-            })
+            return self.send_json({'ok': True, 'name': 'AI Snap Cloud', 'version': '0.4.5', 'e2ee': True, 'instant': True, 'mobile': f'{public_base(self)}/mobile/'})
 
         if path == '/api/pair/create':
-            with lock:
-                code = new_code()
-                pairs[code] = {'created': now(), 'last_used': now()}
-            (pair_dir(code)).mkdir(exist_ok=True)
-            base = public_base(self)
-            return self.send_json({
-                'ok': True,
-                'code': code,
-                'expiresIn': PAIR_TTL,
-                'mobileUrl': f'{base}/mobile/?code={code}'
-            })
+            public_key = None
+            # Pair creation is intentionally POST-only for E2EE. A JSON body is
+            # required so the server can return the exact PC public key to the phone.
+            return self.send_json({'ok': False, 'error': 'use_post_for_secure_pairing'}, 405)
 
         if path == '/api/pair/qr':
             code = self.code()
@@ -190,10 +192,11 @@ class Handler(BaseHTTPRequestHandler):
             code = self.code()
             if not valid_code(code):
                 return self.send_json({'ok': False, 'error': 'invalid_or_expired_pair'}, 401)
-            return self.send_json({'ok': True, 'code': code, 'connected': True})
+            with lock:
+                item = pairs.get(code)
+                public_key = item.get('publicKey') if item else None
+            return self.send_json({'ok': True, 'code': code, 'connected': True, 'e2ee': True, 'publicKey': public_key})
 
-        # Real-time push: the extension holds this connection open and gets
-        # notified the instant a new image lands, instead of only polling.
         if path == '/api/events':
             code = self.code()
             if not valid_code(code):
@@ -201,7 +204,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.cors()
             self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
-            self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Accel-Buffering', 'no')
             self.end_headers()
             q = queue.Queue()
@@ -213,8 +215,10 @@ class Handler(BaseHTTPRequestHandler):
                         if code not in pairs:
                             break
                     try:
-                        name = q.get(timeout=SSE_HEARTBEAT)
-                        self.wfile.write(f"data: {json.dumps({'name': name})}\n\n".encode('utf-8'))
+                        event = q.get(timeout=SSE_HEARTBEAT)
+                        if event is None:
+                            break
+                        self.wfile.write(f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode('utf-8'))
                     except queue.Empty:
                         self.wfile.write(b': ping\n\n')
                     self.wfile.flush()
@@ -253,6 +257,17 @@ class Handler(BaseHTTPRequestHandler):
                         files.append({'name': f.name, 'size': f.stat().st_size, 'age': round(now() - f.stat().st_mtime, 1)})
             return self.send_json({'files': files})
 
+        if path == '/api/file-meta':
+            code = self.code()
+            if not valid_code(code):
+                return self.send_json({'ok': False, 'error': 'invalid_or_expired_pair'}, 401)
+            name = Path(self.q().get('name', [''])[0] or '').name
+            with lock:
+                meta = pairs.get(code, {}).get('files', {}).get(name)
+            if not meta:
+                return self.send_json({'ok': False, 'error': 'metadata_not_found'}, 404)
+            return self.send_json({'ok': True, **meta})
+
         if path.startswith('/api/file/'):
             code = self.code()
             if not valid_code(code):
@@ -260,11 +275,19 @@ class Handler(BaseHTTPRequestHandler):
             name = Path(urllib.parse.unquote(path[len('/api/file/'):])).name
             f = pair_dir(code) / name
             if not f.exists() or not f.is_file():
-                return self.send_json({'error': 'not found'}, 404)
+                return self.send_json({'error': 'not_found'}, 404)
+            with lock:
+                meta = dict(pairs.get(code, {}).get('files', {}).get(name, {}))
             data = f.read_bytes()
-            ext = f.suffix.lower()
-            ct = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp'}.get(ext, 'application/octet-stream')
-            return self.send_bytes(data, 200, ct, {'Content-Disposition': f'inline; filename="{f.name}"'})
+            ct = meta.get('mime') or 'application/octet-stream'
+            extra = {
+                'Content-Disposition': f'inline; filename="{name}"',
+                'X-AI-Snap-IV': meta.get('iv', ''),
+                'X-AI-Snap-Key': meta.get('wrappedKey', ''),
+                'X-AI-Snap-Mime': ct,
+                'X-AI-Snap-Name': meta.get('originalName', name),
+            }
+            return self.send_bytes(data, 200, ct, extra)
 
         return self.send_json({'error': 'not found'}, 404)
 
@@ -274,6 +297,44 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+
+        if path == '/api/pair/create':
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                body = json.loads(self.rfile.read(min(length, 100_000)).decode('utf-8'))
+                public_key = body.get('publicKey')
+                if not isinstance(public_key, dict) or public_key.get('kty') != 'RSA' or public_key.get('n') is None or public_key.get('e') is None:
+                    raise ValueError
+            except Exception:
+                return self.send_json({'ok': False, 'error': 'invalid_public_key'}, 400)
+
+            # Creating a new secure pairing revokes every older pairing.
+            with lock:
+                old_codes = list(pairs.keys())
+                code = new_code()
+                pairs.clear()
+                pairs[code] = {
+                    'created': now(),
+                    'last_used': now(),
+                    'publicKey': public_key,
+                    'files': {},
+                }
+            for old in old_codes:
+                close_subscribers(old)
+                d = pair_dir(old)
+                if d.exists():
+                    for p in d.iterdir():
+                        try:
+                            p.unlink()
+                        except Exception:
+                            pass
+                    try:
+                        d.rmdir()
+                    except Exception:
+                        pass
+            pair_dir(code).mkdir(exist_ok=True)
+            base = public_base(self)
+            return self.send_json({'ok': True, 'code': code, 'expiresIn': PAIR_TTL, 'e2ee': True, 'mobileUrl': f'{base}/mobile/?code={code}'})
 
         if path == '/api/upload':
             code = self.code()
@@ -287,18 +348,29 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'error': 'empty_upload'}, 400)
             if length > MAX_FILE:
                 return self.send_json({'error': 'file_too_large'}, 413)
-            ct = self.headers.get('Content-Type', 'image/jpeg').lower()
+            ct = self.headers.get('Content-Type', 'image/jpeg').lower().split(';', 1)[0].strip()
             if not ct.startswith('image/'):
                 return self.send_json({'error': 'image_only'}, 415)
+            iv = self.headers.get('X-AI-Snap-IV', '').strip()
+            wrapped_key = self.headers.get('X-AI-Snap-AES-Key', '').strip()
+            original_name = urllib.parse.unquote(self.headers.get('X-AI-Snap-Name', 'ai-snap.jpg')).strip() or 'ai-snap.jpg'
+            if not iv or not wrapped_key:
+                return self.send_json({'error': 'missing_encryption_metadata'}, 400)
             data = self.rfile.read(length)
-            ext = '.jpg' if 'jpeg' in ct else '.png' if 'png' in ct else '.webp' if 'webp' in ct else '.bin'
+            ext = '.jpg' if ct == 'image/jpeg' else '.png' if ct == 'image/png' else '.webp' if ct == 'image/webp' else '.bin'
             name = f'snap_{int(now()*1000)}_{secrets.token_hex(3)}{ext}'
             d = pair_dir(code)
             d.mkdir(exist_ok=True)
             (d / name).write_bytes(data)
-            touch_pair(code)
-            notify_subscribers(code, name)
-            return self.send_json({'ok': True, 'name': name})
+            meta = {'name': name, 'iv': iv, 'wrappedKey': wrapped_key, 'mime': ct, 'originalName': original_name}
+            with lock:
+                item = pairs.get(code)
+                if not item:
+                    return self.send_json({'error': 'invalid_or_expired_pair'}, 401)
+                item.setdefault('files', {})[name] = meta
+                item['last_used'] = now()
+            notify_subscribers(code, meta)
+            return self.send_json({'ok': True, 'name': name, 'e2ee': True})
 
         if path == '/api/ack':
             code = self.code()
@@ -316,6 +388,8 @@ class Handler(BaseHTTPRequestHandler):
                     f.unlink()
                 except Exception:
                     pass
+            with lock:
+                pairs.get(code, {}).get('files', {}).pop(name, None)
             return self.send_json({'ok': True})
 
         return self.send_json({'error': 'not found'}, 404)
