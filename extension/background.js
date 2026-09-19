@@ -1,5 +1,6 @@
 async function notifyActiveTab(){try{const [tab]=await chrome.tabs.query({active:true,lastFocusedWindow:true});if(!tab?.id)return;await chrome.tabs.sendMessage(tab.id,{type:'AI_SNAP_ACTIVE_STATE',active:true});}catch(_) {}}
-async function fetchJson(url){const r=await fetch(url,{cache:'no-store'});const text=await r.text();let json=null;try{json=JSON.parse(text)}catch(_){}return{ok:r.ok,status:r.status,json,text}}\nfunction arrayBufferToBase64(buffer){const bytes=new Uint8Array(buffer);let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk){binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));}return btoa(binary);}
+async function fetchJson(url){const r=await fetch(url,{cache:'no-store'});const text=await r.text();let json=null;try{json=JSON.parse(text)}catch(_){}return{ok:r.ok,status:r.status,json,text}}
+function arrayBufferToBase64(buffer){const bytes=new Uint8Array(buffer);let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk){binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));}return btoa(binary);}
 chrome.runtime.onInstalled.addListener(async()=>{await chrome.storage.local.set({enabled:true});notifyActiveTab();});
 chrome.tabs.onActivated.addListener(()=>notifyActiveTab());
 chrome.windows.onFocusChanged.addListener(()=>notifyActiveTab());
