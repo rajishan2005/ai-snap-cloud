@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0b1024">
-<title>AI Snap</title>
+<title>Orami</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <style>
 :root{--bg:#080b18;--text:#f7f7ff;--muted:#b8bbce;--glass:rgba(30,36,66,.82);--line:rgba(255,255,255,.15);--green:#53e88a}
@@ -16,7 +16,7 @@ body:before,body:after{content:"";position:fixed;pointer-events:none;filter:blur
 @media(max-height:700px){.hero{margin:22px 0 20px}.hero h1{font-size:27px}.action{min-height:88px}.action-icon{width:48px;height:48px;font-size:24px}}
 </style>
 </head>
-<body><div class="app"><div class="topbar"><div class="brand"><div class="logo">⌁</div>AI Snap</div><div class="connection"><i class="dot"></i><span id="conn">Checking…</span></div></div><div id="screen"></div></div>
+<body><div class="app"><div class="topbar"><div class="brand"><div class="logo">⌁</div>Orami</div><div class="connection"><i class="dot"></i><span id="conn">Checking…</span></div></div><div id="screen"></div></div>
 <input id="cameraInput" type="file" accept="image/*" capture="environment"><input id="galleryInput" type="file" accept="image/*">
 <script>
 const screen=document.getElementById('screen'),conn=document.getElementById('conn'),camera=document.getElementById('cameraInput'),gallery=document.getElementById('galleryInput');
@@ -24,7 +24,7 @@ const params=new URLSearchParams(location.search),urlCode=(params.get('code')||'
 let code=urlCode||localStorage.getItem('aiSnapCode')||'',busy=false,publicKey=null;
 const base=location.origin;
 function setConn(ok,text){conn.textContent=text;document.querySelector('.connection').style.opacity=ok?'1':'.7'}
-function renderConnect(message='Enter the 6-character code shown in the AI Snap extension on your PC.'){
+function renderConnect(message='Enter the 6-character code shown in the Orami extension on your PC.'){
   screen.innerHTML=`<section class="hero"><h1>Connect your phone.</h1><p>${message}</p></section><div class="glass pair"><h2>Pairing code</h2><p>Type a new code anytime. This replaces the saved pairing on this phone.</p><input id="pairInput" class="pairInput" maxlength="6" inputmode="text" autocomplete="one-time-code" autocapitalize="characters" placeholder="ABC123"><button id="connectBtn" class="primary">Connect</button><div id="pairError" class="error"></div></div>`;
   const input=document.getElementById('pairInput'),btn=document.getElementById('connectBtn');input.focus();input.addEventListener('input',()=>input.value=input.value.replace(/[^a-zA-Z0-9]/g,'').toUpperCase().slice(0,6));btn.onclick=()=>connectWithCode(input.value);input.addEventListener('keydown',e=>{if(e.key==='Enter')connectWithCode(input.value)});
 }
@@ -38,7 +38,7 @@ async function connectWithCode(value){
   try{const r=await fetch(`${base}/api/pair/status?code=${encodeURIComponent(next)}`,{cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok||!d.e2ee||!d.publicKey)throw new Error();code=next;publicKey=d.publicKey;localStorage.setItem('aiSnapCode',code);history.replaceState(null,'',`${location.pathname}?code=${code}`);setConn(true,'Connected');renderReady()}catch{err.textContent='That code is invalid or expired. Create a new pairing on the PC.'}
 }
 function renderUploading(url){screen.innerHTML=`<section class="hero"><h1>Sending…</h1><p>Encrypting and sending to your connected PC.</p></section><div class="glass preview"><img src="${url}" alt="Uploading photo"></div><div class="bottom"><div class="status">🔐 End-to-end encrypted • sending…</div></div>`}
-function renderSuccess(url){screen.innerHTML=`<section class="hero success"><h1>Sent.</h1><p>Your encrypted image was delivered to the AI Snap extension.</p></section><div class="glass preview"><img src="${url}" alt="Sent photo"></div><div class="bottom"><button class="primary" id="again">Send Another</button><button class="secondary" id="disconnect">Disconnect / use another code</button></div>`;document.getElementById('again').onclick=renderReady;document.getElementById('disconnect').onclick=disconnectPhone}
+function renderSuccess(url){screen.innerHTML=`<section class="hero success"><h1>Sent.</h1><p>Your encrypted image was delivered to the Orami extension.</p></section><div class="glass preview"><img src="${url}" alt="Sent photo"></div><div class="bottom"><button class="primary" id="again">Send Another</button><button class="secondary" id="disconnect">Disconnect / use another code</button></div>`;document.getElementById('again').onclick=renderReady;document.getElementById('disconnect').onclick=disconnectPhone}
 function b64url(bytes){let bin='';const a=new Uint8Array(bytes);for(let i=0;i<a.length;i++)bin+=String.fromCharCode(a[i]);return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 async function importPublicKey(jwk){return crypto.subtle.importKey('jwk',jwk,{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt'])}
 async function getFreshPublicKey(){
