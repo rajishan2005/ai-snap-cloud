@@ -49,7 +49,7 @@ async function getFreshPublicKey(){
   return publicKey;
 }
 async function prepareImage(file){
-  const MAX_SIDE=3500;
+  const MAX_SIDE=3000;
   if(!file||!file.type.startsWith('image/'))return file;
   try{
     const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
@@ -59,7 +59,7 @@ async function prepareImage(file){
     const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
     const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(bitmap,0,0,w,h);bitmap.close();
     const outputType=file.type==='image/png'?'image/png':file.type==='image/webp'?'image/webp':'image/jpeg';
-    const quality=outputType==='image/png'?undefined:.94;
+    const quality=outputType==='image/png'?undefined:.90;
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,outputType,quality));
     if(!blob)return file;
     const ext=outputType==='image/png'?'.png':outputType==='image/webp'?'.webp':'.jpg';
