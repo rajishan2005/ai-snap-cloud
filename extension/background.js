@@ -1,5 +1,5 @@
 async function notifyActiveTab(){try{const [tab]=await chrome.tabs.query({active:true,lastFocusedWindow:true});if(!tab?.id)return;await chrome.tabs.sendMessage(tab.id,{type:'AI_SNAP_ACTIVE_STATE',active:true});}catch(_) {}}
-async function fetchJson(url){const r=await fetch(url,{cache:'no-store'});const text=await r.text();let json=null;try{json=JSON.parse(text)}catch(_){}return{ok:r.ok,status:r.status,json,text}}
+async function fetchJson(url){const r=await fetch(url,{cache:'no-store'});const text=await r.text();let json=null;try{json=JSON.parse(text)}catch(_){}return{ok:r.ok,status:r.status,json,text}}\nfunction arrayBufferToBase64(buffer){const bytes=new Uint8Array(buffer);let binary='';const chunk=0x8000;for(let i=0;i<bytes.length;i+=chunk){binary+=String.fromCharCode(...bytes.subarray(i,Math.min(i+chunk,bytes.length)));}return btoa(binary);}
 chrome.runtime.onInstalled.addListener(async()=>{await chrome.storage.local.set({enabled:true});notifyActiveTab();});
 chrome.tabs.onActivated.addListener(()=>notifyActiveTab());
 chrome.windows.onFocusChanged.addListener(()=>notifyActiveTab());
@@ -22,7 +22,7 @@ chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
         if(!headers['X-AI-Snap-Key']&&eventMeta.wrappedKey)headers['X-AI-Snap-Key']=eventMeta.wrappedKey;
         if(!headers['X-AI-Snap-Mime']&&eventMeta.mime)headers['X-AI-Snap-Mime']=eventMeta.mime;
         if(!headers['X-AI-Snap-Name']&&eventMeta.originalName)headers['X-AI-Snap-Name']=eventMeta.originalName;
-        sendResponse({ok:r.ok,status:r.status,headers,data});
+        sendResponse({ok:r.ok,status:r.status,headers,dataB64:arrayBufferToBase64(data)});
       }else{
         const r=await fetch(message.url,{method:message.method||'GET',headers:message.headers||{},body:message.body,cache:'no-store'});const text=await r.text();sendResponse({ok:r.ok,status:r.status,text});
       }
