@@ -124,7 +124,7 @@ threading.Thread(target=cleanup_loop, daemon=True).start()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'AISnapCloud/0.4.5'
+    server_version = 'OramiCloud/0.4.5'
 
     def cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -164,10 +164,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
 
         if path == '/health':
-            return self.send_json({'ok': True, 'name': 'AI Snap Cloud', 'version': '0.4.5', 'e2ee': True, 'instant': True})
+            return self.send_json({'ok': True, 'name': 'Orami', 'version': '1.0.0', 'e2ee': True, 'instant': True})
 
         if path == '/':
-            return self.send_json({'ok': True, 'name': 'AI Snap Cloud', 'version': '0.4.5', 'e2ee': True, 'instant': True, 'mobile': f'{public_base(self)}/mobile/'})
+            return self.send_json({'ok': True, 'name': 'Orami', 'version': '0.4.5', 'e2ee': True, 'instant': True, 'mobile': f'{public_base(self)}/mobile/'})
 
         if path == '/api/pair/create':
             public_key = None
@@ -409,5 +409,5 @@ def public_base(handler):
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '8765'))
-    print(f'AI Snap Cloud listening on :{port}')
+    print(f'Orami listening on :{port}')
     ThreadingHTTPServer(('0.0.0.0', port), Handler).serve_forever()
