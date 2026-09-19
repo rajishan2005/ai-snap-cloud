@@ -3,30 +3,10 @@
   "name": "Orami",
   "version": "1.0.0",
   "description": "End-to-end encrypted phone-to-ChatGPT image relay with instant delivery.",
-  "permissions": [
-    "storage",
-    "tabs"
-  ],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "action": {
-    "default_popup": "popup.html"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://chatgpt.com/*",
-        "https://chat.openai.com/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ]
+  "permissions": ["storage","tabs"],
+  "host_permissions": ["http://*/*","https://*/*"],
+  "icons": {"128":"icons/orami-128.png"},
+  "background": {"service_worker":"background.js"},
+  "action": {"default_popup":"popup.html","default_icon":{"128":"icons/orami-128.png"}},
+  "content_scripts": [{"matches":["https://chatgpt.com/*","https://chat.openai.com/*"],"js":["content.js"],"run_at":"document_idle"}]
 }
