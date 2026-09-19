@@ -2,7 +2,8 @@ let eventSource=null,reconnectTimer=null,pollTimer=null,activeTab=false,pendingC
 const processing=new Set();
 let pairingMissingLogged=false;
 let pairingState='unknown';
-function fromB64url(value){const s=String(value||'').replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-(String(value||'').length%4))%4);const raw=atob(s);return Uint8Array.from(raw,c=>c.charCodeAt(0));}\nfunction base64ToArrayBuffer(value){const raw=atob(value);const out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out.buffer;}
+function fromB64url(value){const s=String(value||'').replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-(String(value||'').length%4))%4);const raw=atob(s);return Uint8Array.from(raw,c=>c.charCodeAt(0));}
+function base64ToArrayBuffer(value){const raw=atob(value);const out=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out.buffer;}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function runtimeMessage(message){return new Promise((resolve,reject)=>{if(contextDead){reject(new Error('Extension context invalidated. Refresh the ChatGPT tab.'));return}try{chrome.runtime.sendMessage(message,response=>{if(chrome.runtime.lastError){const msg=chrome.runtime.lastError.message||'Extension context invalidated.';if(/context invalidated|receiving end does not exist/i.test(msg)){contextDead=true;cleanup();}reject(new Error(msg));}else resolve(response);});}catch(e){if(/context invalidated/i.test(e?.message||'')){contextDead=true;cleanup();}reject(e);}});}
 async function getConfig(){return chrome.storage.local.get({baseUrl:'',pairCode:'',privateKey:null,publicKey:null,enabled:true});}
