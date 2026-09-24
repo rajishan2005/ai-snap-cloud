@@ -167,7 +167,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True, 'name': 'Orami', 'version': '1.0.0', 'e2ee': True, 'instant': True})
 
         if path == '/':
-            return self.send_json({'ok': True, 'name': 'Orami', 'version': '1.0.0', 'e2ee': True, 'instant': True, 'mobile': f'{public_base(self)}/mobile/'})
+            return self.serve_file(ROOT / 'index.html')
 
         if path == '/api/pair/create':
             public_key = None
