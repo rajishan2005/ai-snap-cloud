@@ -9,8 +9,8 @@ DATA = ROOT / 'data'
 DATA.mkdir(exist_ok=True)
 
 MAX_FILE = 25 * 1024 * 1024
-ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.pdf', '.csv', '.txt', '.docx', '.xlsx', '.pptx'}
-ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf', 'text/csv', 'application/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream'}
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.avif', '.pdf', '.csv', '.txt', '.docx', '.xlsx', '.pptx'}
+ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif', 'image/avif', 'application/pdf', 'text/csv', 'application/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream'}
 PAIR_TTL = 30 * 60
 FILE_TTL = 10 * 60
 CLEAN_INTERVAL = 60
@@ -353,7 +353,7 @@ class Handler(BaseHTTPRequestHandler):
             ct = self.headers.get('Content-Type', 'application/octet-stream').lower().split(';', 1)[0].strip()
             original_name = urllib.parse.unquote(self.headers.get('X-AI-Snap-Name', 'file.bin')).strip() or 'file.bin'
             ext = Path(original_name).suffix.lower()
-            if ext not in ALLOWED_EXTENSIONS or (ct not in ALLOWED_MIME and not ct.startswith('image/')):
+            if ext not in ALLOWED_EXTENSIONS or ct not in ALLOWED_MIME:
                 return self.send_json({'error': 'unsupported_file_type', 'allowed': sorted(ALLOWED_EXTENSIONS)}, 415)
             iv = self.headers.get('X-AI-Snap-IV', '').strip()
             wrapped_key = self.headers.get('X-AI-Snap-AES-Key', '').strip()
