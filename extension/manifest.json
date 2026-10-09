@@ -3,8 +3,8 @@
   "name": "Orami",
   "version": "1.1.0",
   "description": "End-to-end encrypted phone-to-AI file relay with local history."
-  "permissions": ["storage","tabs"],
-  "host_permissions": ["http://*/*","https://*/*"],
+  "permissions": ["storage"],
+  "host_permissions": ["https://ai-snap-cloud-production.up.railway.app/*"],
   "icons": {"128":"icons/orami-128.png"},
   "background": {"service_worker":"background.js"},
   "action": {"default_popup":"popup.html","default_icon":{"128":"icons/orami-128.png"}},
