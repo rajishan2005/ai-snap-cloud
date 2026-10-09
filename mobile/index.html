@@ -76,7 +76,7 @@ async function encryptFile(file){
   const raw=await crypto.subtle.exportKey('raw',aes);
   const rsa=await importPublicKey(jwk);
   const wrapped=await crypto.subtle.encrypt({name:'RSA-OAEP'},rsa,raw);
-  return {cipher,iv:b64url(iv),wrapped:b64url(wrapped),mime:file.type||'image/jpeg',name:file.name||'ai-snap.jpg'};
+  return {cipher,iv:b64url(iv),wrapped:b64url(wrapped),mime:file.type||'application/octet-stream',name:file.name||'ai-snap.bin'};
 }
 async function upload(file){
   if(busy||!file)return;busy=true;const url=URL.createObjectURL(file);renderUploading(url);
