@@ -126,7 +126,7 @@ threading.Thread(target=cleanup_loop, daemon=True).start()
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'OramiCloud/1.0.0'
+    server_version = 'OramiCloud/1.1.0'
 
     def cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -166,7 +166,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
 
         if path == '/health':
-            return self.send_json({'ok': True, 'name': 'Orami', 'version': '1.0.0', 'e2ee': True, 'instant': True})
+            return self.send_json({'ok': True, 'name': 'Orami', 'version': '1.1.0', 'e2ee': True, 'instant': True})
 
         if path == '/':
             return self.serve_file(ROOT / 'index.html')
