@@ -10,7 +10,7 @@ DATA.mkdir(exist_ok=True)
 
 MAX_FILE = 25 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.pdf', '.csv', '.txt', '.docx', '.xlsx', '.pptx'}
-ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf', 'text/csv', 'application/csv', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream'}
+ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf', 'text/csv', 'application/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream'}
 PAIR_TTL = 30 * 60
 FILE_TTL = 10 * 60
 CLEAN_INTERVAL = 60
