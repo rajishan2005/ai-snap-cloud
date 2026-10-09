@@ -17,7 +17,7 @@ body:before,body:after{content:"";position:fixed;pointer-events:none;filter:blur
 </style>
 </head>
 <body><div class="app"><div class="topbar"><div class="brand"><div class="logo">⌁</div>Orami</div><div class="connection"><i class="dot"></i><span id="conn">Checking…</span></div></div><div id="screen"></div></div>
-<input id="cameraInput" type="file" accept="image/*" capture="environment"><input id="galleryInput" type="file" accept="image/*">
+<input id="cameraInput" type="file" accept="image/*" capture="environment"><input id="galleryInput" type="file" accept="image/*,.pdf,.csv,.txt,.docx,.xlsx,.pptx,application/pdf,text/csv,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation">
 <script>
 const screen=document.getElementById('screen'),conn=document.getElementById('conn'),camera=document.getElementById('cameraInput'),gallery=document.getElementById('galleryInput');
 const params=new URLSearchParams(location.search),urlCode=(params.get('code')||'').trim().toUpperCase();
@@ -30,15 +30,15 @@ function renderConnect(message='Enter the 6-character code shown in the Orami ex
 }
 function disconnectPhone(){code='';publicKey=null;localStorage.removeItem('aiSnapCode');history.replaceState(null,'',location.pathname);setConn(false,'Not paired');renderConnect('Enter a new pairing code from the PC extension.')}
 function renderReady(){
-  screen.innerHTML=`<section class="hero"><h1>Ready when you are.</h1><p>Capture an image on this phone and it will appear in the currently open ChatGPT chat.</p></section><div class="actions"><button class="action" id="cameraBtn"><span class="action-icon">📷</span><span><strong>Take Photo</strong><span>Open your camera</span></span></button><button class="action" id="galleryBtn"><span class="action-icon">🖼️</span><span><strong>Choose from Gallery</strong><span>Pick an existing image</span></span></button></div><div class="bottom"><div class="status"><i class="dot"></i> Connected • ${code}</div><button class="secondary" id="change">Change pairing code</button></div>`;
+  screen.innerHTML=`<section class="hero"><h1>Ready when you are.</h1><p>Send photos or documents to the currently open ChatGPT, Gemini, or Claude tab.</p></section><div class="actions"><button class="action" id="cameraBtn"><span class="action-icon">📷</span><span><strong>Take Photo</strong><span>Open your camera</span></span></button><button class="action" id="galleryBtn"><span class="action-icon">📎</span><span><strong>Choose Photo or File</strong><span>Images, PDF, CSV, TXT, DOCX and Office files</span></span></button></div><div class="bottom"><div class="status"><i class="dot"></i> Connected • ${code}</div><button class="secondary" id="change">Change pairing code</button></div>`;
   document.getElementById('cameraBtn').onclick=()=>camera.click();document.getElementById('galleryBtn').onclick=()=>gallery.click();document.getElementById('change').onclick=disconnectPhone;
 }
 async function connectWithCode(value){
   const next=value.trim().toUpperCase(),err=document.getElementById('pairError');if(next.length!==6){err.textContent='Enter the 6-character pairing code.';return}err.textContent='Checking code…';
   try{const r=await fetch(`${base}/api/pair/status?code=${encodeURIComponent(next)}`,{cache:'no-store'}),d=await r.json();if(!r.ok||!d.ok||!d.e2ee||!d.publicKey)throw new Error();code=next;publicKey=d.publicKey;localStorage.setItem('aiSnapCode',code);history.replaceState(null,'',`${location.pathname}?code=${code}`);setConn(true,'Connected');renderReady()}catch{err.textContent='That code is invalid or expired. Create a new pairing on the PC.'}
 }
-function renderUploading(url){screen.innerHTML=`<section class="hero"><h1>Sending…</h1><p>Encrypting and sending to your connected PC.</p></section><div class="glass preview"><img src="${url}" alt="Uploading photo"></div><div class="bottom"><div class="status">🔐 End-to-end encrypted • sending…</div></div>`}
-function renderSuccess(url){screen.innerHTML=`<section class="hero success"><h1>Sent.</h1><p>Your encrypted image was delivered to the Orami extension.</p></section><div class="glass preview"><img src="${url}" alt="Sent photo"></div><div class="bottom"><button class="primary" id="again">Send Another</button><button class="secondary" id="disconnect">Disconnect / use another code</button></div>`;document.getElementById('again').onclick=renderReady;document.getElementById('disconnect').onclick=disconnectPhone}
+function renderUploading(url){screen.innerHTML=`<section class="hero"><h1>Sending…</h1><p>Encrypting and sending your file to your connected PC.</p></section><div class="glass preview"><img src="${url}" alt="Uploading photo"></div><div class="bottom"><div class="status">🔐 End-to-end encrypted • sending…</div></div>`}
+function renderSuccess(url){screen.innerHTML=`<section class="hero success"><h1>Sent.</h1><p>Your encrypted file was delivered to the Orami extension.</p></section><div class="glass preview"><img src="${url}" alt="Sent photo"></div><div class="bottom"><button class="primary" id="again">Send Another</button><button class="secondary" id="disconnect">Disconnect / use another code</button></div>`;document.getElementById('again').onclick=renderReady;document.getElementById('disconnect').onclick=disconnectPhone}
 function b64url(bytes){let bin='';const a=new Uint8Array(bytes);for(let i=0;i<a.length;i++)bin+=String.fromCharCode(a[i]);return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 async function importPublicKey(jwk){return crypto.subtle.importKey('jwk',jwk,{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt'])}
 async function getFreshPublicKey(){
@@ -76,7 +76,7 @@ async function encryptFile(file){
   const raw=await crypto.subtle.exportKey('raw',aes);
   const rsa=await importPublicKey(jwk);
   const wrapped=await crypto.subtle.encrypt({name:'RSA-OAEP'},rsa,raw);
-  return {cipher,iv:b64url(iv),wrapped:b64url(wrapped),mime:file.type||'image/jpeg',name:file.name||'ai-snap.jpg'};
+  return {cipher,iv:b64url(iv),wrapped:b64url(wrapped),mime:file.type||'application/octet-stream',name:file.name||'ai-snap.bin'};
 }
 async function upload(file){
   if(busy||!file)return;busy=true;const url=URL.createObjectURL(file);renderUploading(url);
