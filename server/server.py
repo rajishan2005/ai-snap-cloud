@@ -9,6 +9,8 @@ DATA = ROOT / 'data'
 DATA.mkdir(exist_ok=True)
 
 MAX_FILE = 25 * 1024 * 1024
+ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.pdf', '.csv', '.txt', '.docx', '.xlsx', '.pptx'}
+ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'application/pdf', 'text/csv', 'application/csv', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/octet-stream'}
 PAIR_TTL = 30 * 60
 FILE_TTL = 10 * 60
 CLEAN_INTERVAL = 60
@@ -348,16 +350,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'error': 'empty_upload'}, 400)
             if length > MAX_FILE:
                 return self.send_json({'error': 'file_too_large'}, 413)
-            ct = self.headers.get('Content-Type', 'image/jpeg').lower().split(';', 1)[0].strip()
-            if not ct.startswith('image/'):
-                return self.send_json({'error': 'image_only'}, 415)
+            ct = self.headers.get('Content-Type', 'application/octet-stream').lower().split(';', 1)[0].strip()
+            original_name = urllib.parse.unquote(self.headers.get('X-AI-Snap-Name', 'file.bin')).strip() or 'file.bin'
+            ext = Path(original_name).suffix.lower()
+            if ext not in ALLOWED_EXTENSIONS or (ct not in ALLOWED_MIME and not ct.startswith('image/')):
+                return self.send_json({'error': 'unsupported_file_type', 'allowed': sorted(ALLOWED_EXTENSIONS)}, 415)
             iv = self.headers.get('X-AI-Snap-IV', '').strip()
             wrapped_key = self.headers.get('X-AI-Snap-AES-Key', '').strip()
-            original_name = urllib.parse.unquote(self.headers.get('X-AI-Snap-Name', 'ai-snap.jpg')).strip() or 'ai-snap.jpg'
             if not iv or not wrapped_key:
                 return self.send_json({'error': 'missing_encryption_metadata'}, 400)
             data = self.rfile.read(length)
-            ext = '.jpg' if ct == 'image/jpeg' else '.png' if ct == 'image/png' else '.webp' if ct == 'image/webp' else '.bin'
+            ext = Path(original_name).suffix.lower() or '.bin'
             name = f'snap_{int(now()*1000)}_{secrets.token_hex(3)}{ext}'
             d = pair_dir(code)
             d.mkdir(exist_ok=True)
